@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Tokens globales (modo claro/oscuro por clase .dark) =====
+   Regla: 1 color de marca (2 intensidades), 1 tinta suave, grises semánticos, y 2-3 estados. */
+:root {
+  /* ---- BRAND (turquesa) | solo 4 pasos útiles ---- */
+  --brand-50:  236 254 255; /* fondo muy suave (chips, badges, fills) */
+  --brand-400:  34 211 238; /* halos, hovers */
+  --brand-500:  13 191 214; /* primario/CTA */
+  --brand-600:   8 145 178; /* primario hover / activos fuertes */
+
+  /* Semánticos base */
+  --color-primary: var(--brand-500);
+  --color-on-primary: 255 255 255;
+
+  --color-surface: 250 250 250;   /* gris 50 */
+  --color-on-surface: 24 24 27;   /* gris 900 */
+  --color-surface-variant: 244 244 245; /* gris 100 para contenedores suaves */
+  --color-outline: 228 228 231;   /* gris 200 para bordes */
+
+  /* Estados (reducidos) */
+  --color-success: 16 185 129;    /* emerald-500 */
+  --color-error:   239 68 68;     /* red-500 */
+  /* (warning opcional) --color-warning: 245 158 11; */
+
+  /* Tip: elimina morados/otros si ya no los usas */
+}
+
+.dark {
+  /* Marca ligeramente más viva en dark para contraste */
+  --brand-400:  56 226 242;
+  --brand-500:  20 201 224;
+  --brand-600:  14 160 199;
+
+  --color-primary: var(--brand-500);
+  --color-on-primary: 255 255 255;
+
+  --color-surface: 9 9 11;            /* gris 950 */
+  --color-on-surface: 244 244 245;    /* gris 100 */
+  --color-surface-variant: 24 24 27;  /* gris 900 */
+  --color-outline: 63 63 70;          /* gris 700 */
+}
+
+/* ===== Helpers coherentes con la paleta reducida ===== */
+@layer base {
+  html { color-scheme: light; }
+  .dark html { color-scheme: dark; }
+  body { @apply bg-surface text-onSurface antialiased; }
+}
+@layer utilities {
+  .text-onSurface { color: rgb(var(--color-on-surface)); }
+  .text-onPrimary { color: rgb(var(--color-on-primary)); }
+  .bg-surface { background-color: rgb(var(--color-surface)); }
+  .bg-surfaceVariant { background-color: rgb(var(--color-surface-variant)); }
+  .text-success { color: rgb(var(--color-success)); }
+  .text-error { color: rgb(var(--color-error)); }
+  .border-outline { border-color: rgb(var(--color-outline)); }
+}
