@@ -72,7 +72,7 @@ export default defineComponent({
               />
               <div class="relative w-16 h-16 gradient-primary rounded-full grid place-items-center shadow-lg overflow-hidden">
                 <img
-                  src="./src/assets/logoVianova.png"
+                  src="/logoVianova.png"
                   alt="Logo VIANOVA"
                   class="h-8 w-8 object-contain"
                 />
