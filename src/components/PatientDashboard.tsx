@@ -1,12 +1,16 @@
 import { defineComponent, ref, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { usePatientDataStore } from '@/stores/patientData'
 import AppButton from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import ConnectionManager from '@/components/ConnectionManager'
+import GameLauncher from '@/components/games/GameLauncher.vue'
 import {
   Heart, BookOpen, MessageCircle, Music, Phone, Calendar, Activity,
-  ArrowLeft, Home, Sparkles, TrendingUp, Clock, Send, Sun, Moon, Sunrise
+  ArrowLeft, Home, Sparkles, TrendingUp, Clock, Send, Sun, Moon, Sunrise, LogOut, Users
 } from 'lucide-vue-next'
 
-type TabId = 'home' | 'diary' | 'exercises' | 'contact'
+type TabId = 'home' | 'diary' | 'exercises' | 'contact' | 'connections'
 
 const Badge = defineComponent({
   name: 'Badge',
@@ -130,12 +134,17 @@ export default defineComponent({
   name: 'PatientDashboard',
   emits: ['back'],
   setup(_, { emit }) {
+    const authStore = useAuthStore()
+    const patientDataStore = usePatientDataStore()
+
     // estado
     const moodLevel = ref<number>(6)
     const painLevel = ref<number>(3)
     const energyLevel = ref<number>(5)
     const journalEntry = ref('')
     const activeTab = ref<TabId>('home')
+    const showGamesModal = ref(false)
+    const savingEntry = ref(false)
 
     const motivationalMessages = [
       'Cada día es una nueva oportunidad para encontrar pequeños momentos de paz.',
@@ -150,6 +159,7 @@ export default defineComponent({
       { id: 'home', label: 'Inicio', icon: () => <Home class="h-5 w-5" /> },
       { id: 'diary', label: 'Diario', icon: () => <Activity class="h-5 w-5" /> },
       { id: 'exercises', label: 'Bienestar', icon: () => <Heart class="h-5 w-5" /> },
+      { id: 'connections', label: 'Conexiones', icon: () => <Users class="h-5 w-5" /> },
       { id: 'contact', label: 'Contacto', icon: () => <MessageCircle class="h-5 w-5" /> }
     ]
 
@@ -167,11 +177,42 @@ export default defineComponent({
       return 'Buenas noches'
     }
 
+    // Save daily entry
+    const saveDailyEntry = async () => {
+      if (!authStore.user?.uid) return
+
+      savingEntry.value = true
+      try {
+        const today = new Date().toISOString().split('T')[0]
+
+        const result = await patientDataStore.saveDailyEntry({
+          date: today,
+          mood: moodLevel.value,
+          pain: painLevel.value,
+          energy: energyLevel.value,
+          notes: journalEntry.value || undefined
+        })
+
+        if (result.success) {
+          // Reset form
+          journalEntry.value = ''
+          // Could show success message here
+        } else {
+          console.error('Error saving entry:', result.error)
+          // Could show error message here
+        }
+      } catch (error) {
+        console.error('Error saving daily entry:', error)
+      } finally {
+        savingEntry.value = false
+      }
+    }
+
     return () => (
-      <div class="app-container min-h-screen gradient-calm text-onSurface">
+      <div class="app-container min-h-screen gradient-calm text-onSurface flex flex-col">
         {/* Header */}
-        <div class="mobile-header sticky top-0 z-40 backdrop-blur bg-surface/70 border-b border-outline/40">
-          <div class="flex items-center justify-between px-6 h-14">
+        <div class="mobile-header sticky top-0 z-40 backdrop-blur bg-surface/70 border-b border-outline/40 lg:bg-surface/90">
+          <div class="flex items-center justify-between px-4 sm:px-6 lg:px-8 h-14 max-w-7xl mx-auto">
             <AppButton
               class="touch-manipulation rounded-full w-12 h-12 bg-transparent hover:bg-surfaceVariant"
               onClick={() => emit('back')}
@@ -187,11 +228,16 @@ export default defineComponent({
               <h1 class="text-lg font-semibold">Mi Bienestar</h1>
             </div>
 
-            <div class="w-10" />
+            <AppButton
+              class="touch-manipulation rounded-full w-12 h-12 bg-transparent hover:bg-surfaceVariant"
+              onClick={() => authStore.logout()}
+            >
+              <LogOut class="h-5 w-5 text-onSurface" />
+            </AppButton>
           </div>
         </div>
 
-        <div class="mobile-content px-6 py-6 space-y-6">
+        <div class="mobile-content px-4 sm:px-6 lg:px-8 py-6 space-y-6 max-w-7xl mx-auto flex-1 pb-20">
           {/* HOME */}
           {activeTab.value === 'home' && (
             <div class="space-y-6">
@@ -230,7 +276,7 @@ export default defineComponent({
                   </div>
                 </CardHeader>
                 <CardContent class="space-y-4">
-                  <div class="grid grid-cols-3 gap-4">
+                  <div class="grid grid-cols-3 gap-3 sm:gap-4">
                     <div class="text-center">
                       <div class="w-12 h-12 mx-auto mb-2 rounded-2xl grid place-items-center shadow-sm text-onPrimary"
                         style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-500)));">
@@ -268,25 +314,25 @@ export default defineComponent({
                   <div class="space-y-3">
                     <div class="flex justify-between items-center">
                       <span class="text-sm font-medium text-onSurface/80">Estado de ánimo promedio</span>
-                      <span class="text-sm font-bold text-brand-600">6.2/10</span>
+                      <span class="text-sm font-bold text-brand-600">{patientDataStore.patientStats.averageMood}/10</span>
                     </div>
-                    <Progress value={62} />
+                    <Progress value={patientDataStore.patientStats.averageMood * 10} />
                   </div>
 
                   <div class="space-y-3">
                     <div class="flex justify-between items-center">
-                      <span class="text-sm font-medium text-onSurface/80">Días con registro</span>
-                      <span class="text-sm font-bold text-brand-600">5/7</span>
+                      <span class="text-sm font-medium text-onSurface/80">Racha de registros</span>
+                      <span class="text-sm font-bold text-brand-600">{patientDataStore.patientStats.streakDays} días</span>
                     </div>
-                    <Progress value={71} />
+                    <Progress value={Math.min(patientDataStore.patientStats.streakDays * 10, 100)} />
                   </div>
 
                   <div class="space-y-3">
                     <div class="flex justify-between items-center">
-                      <span class="text-sm font-medium text-onSurface/80">Ejercicios completados</span>
-                      <span class="text-sm font-bold text-brand-600">3 esta semana</span>
+                      <span class="text-sm font-medium text-onSurface/80">Total de registros</span>
+                      <span class="text-sm font-bold text-brand-600">{patientDataStore.patientStats.totalEntries}</span>
                     </div>
-                    <Progress value={30} />
+                    <Progress value={Math.min(patientDataStore.patientStats.totalEntries * 5, 100)} />
                   </div>
                 </CardContent>
               </Card>
@@ -321,6 +367,25 @@ export default defineComponent({
                       <p class="text-sm text-onSurface/70">Lic. Martínez</p>
                     </div>
                     <Badge class="bg-[rgb(var(--color-success))] text-white border-[rgb(var(--color-success))]">Viernes 15:00</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Minijuegos Section */}
+              <Card
+                class="rounded-2xl border border-outline/40 bg-surface cursor-pointer transition-all duration-200 active:scale-[0.98]"
+                onClick={() => (showGamesModal.value = true)}
+              >
+                <CardHeader class="pb-4">
+                  <CardTitle class="text-lg flex items-center gap-2">
+                    <span class="text-2xl">🎮</span>
+                    <span>Minijuegos</span>
+                  </CardTitle>
+                  <CardDescription>Actividades para relajarte y divertirte</CardDescription>
+                </CardHeader>
+                <CardContent class="space-y-4">
+                  <div class="text-center text-sm text-onSurface/70">
+                    <span>Click para ver juegos disponibles</span>
                   </div>
                 </CardContent>
               </Card>
@@ -410,10 +475,14 @@ export default defineComponent({
                     />
                   </div>
 
-                  <AppButton class="w-full h-14 rounded-2xl touch-manipulation shadow-lg text-onPrimary"
-                    style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
+                  <AppButton
+                    class="w-full h-14 rounded-2xl touch-manipulation shadow-lg text-onPrimary"
+                    style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));"
+                    disabled={savingEntry.value}
+                    onClick={saveDailyEntry}
+                  >
                     <Send class="h-5 w-5 mr-2 text-onPrimary" />
-                    Guardar Registro del Día
+                    {savingEntry.value ? 'Guardando...' : 'Guardar Registro del Día'}
                   </AppButton>
                 </CardContent>
               </Card>
@@ -510,6 +579,18 @@ export default defineComponent({
             </div>
           )}
 
+
+          {/* CONNECTIONS */}
+          {activeTab.value === 'connections' && (
+            <div class="space-y-6">
+              <div class="text-center space-y-2">
+                <h2 class="text-2xl font-semibold">Mis Conexiones</h2>
+                <p class="text-onSurface/70">Gestiona tu red de apoyo</p>
+              </div>
+              <ConnectionManager />
+            </div>
+          )}
+
           {/* CONTACT */}
           {activeTab.value === 'contact' && (
             <div class="space-y-6">
@@ -590,11 +671,55 @@ export default defineComponent({
         </div>
 
         {/* Bottom Nav */}
-        <MobileBottomNav
-          activeTab={activeTab.value}
-          tabs={navTabs}
-          onUpdate:activeTab={(t: TabId) => (activeTab.value = t)}
-        />
+        <nav class="fixed bottom-0 left-0 right-0 z-40 bg-surface/70 backdrop-blur border-t border-outline/40">
+          <div class="grid grid-cols-5 max-w-7xl mx-auto">
+            {navTabs.map((t) => {
+              const active = activeTab.value === t.id
+              return (
+                <button
+                  key={t.id}
+                  class={[
+                    'py-3 px-2 text-xs flex flex-col items-center justify-center gap-1 transition-colors',
+                    active ? 'text-brand-600 font-medium' : 'text-onSurface/70'
+                  ]}
+                  onClick={() => (activeTab.value = t.id)}
+                >
+                  {t.icon()}
+                  <span class="truncate w-full text-center">{t.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </nav>
+
+        {/* Games Modal */}
+        {showGamesModal.value && (
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
+            <div class="bg-surface rounded-2xl w-full max-w-sm sm:max-w-md lg:max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl">
+              {/* Header */}
+              <div class="p-3 sm:p-4 border-b border-outline/40 flex items-center justify-between">
+                <div class="flex items-center gap-2 sm:gap-3">
+                  <span class="text-xl sm:text-2xl">🎮</span>
+                  <div>
+                    <h3 class="font-semibold text-onSurface text-base sm:text-lg">Minijuegos</h3>
+                    <p class="text-xs sm:text-sm text-onSurface/60">Selecciona un juego</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => (showGamesModal.value = false)}
+                  class="p-2 hover:bg-surfaceVariant rounded-lg transition-colors touch-manipulation"
+                >
+                  <span class="text-lg sm:text-xl">✕</span>
+                </button>
+              </div>
+
+              {/* Games Content */}
+              <div class="p-3 sm:p-4 max-h-[calc(95vh-120px)] sm:max-h-[calc(90vh-140px)] overflow-y-auto">
+                <GameLauncher />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

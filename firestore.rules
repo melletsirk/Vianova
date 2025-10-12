@@ -1,0 +1,86 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users collection - allow all authenticated users to read/write their own data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Relationships collection
+    match /relationships/{relationshipId} {
+      // Allow read if user is part of the relationship
+      allow read: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.caregiverId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid
+      );
+
+      // Allow create if authenticated
+      allow create: if isAuthenticated();
+
+      // Allow update if user is part of the relationship
+      allow update: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.caregiverId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid
+      );
+
+      // Allow delete if user is part of the relationship
+      allow delete: if isAuthenticated() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.caregiverId == request.auth.uid ||
+        resource.data.professionalId == request.auth.uid
+      );
+    }
+
+    // Invitations collection
+    match /invitations/{invitationId} {
+      // Allow read if user sent the invitation or is the recipient
+      allow read: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toEmail == request.auth.token.email
+      );
+
+      // Allow create if authenticated
+      allow create: if isAuthenticated();
+
+      // Allow update if user sent the invitation or is the recipient
+      allow update: if isAuthenticated() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toEmail == request.auth.token.email
+      );
+    }
+
+    // Care tasks collection
+    match /careTasks/{taskId} {
+      // Allow read if user is the caregiver who created the task
+      allow read: if isAuthenticated() && resource.data.caregiverId == request.auth.uid;
+
+      // Allow create if authenticated (caregiver creating task)
+      allow create: if isAuthenticated();
+
+      // Allow update if user is the caregiver who created the task
+      allow update: if isAuthenticated() && resource.data.caregiverId == request.auth.uid;
+
+      // Allow delete if user is the caregiver who created the task
+      allow delete: if isAuthenticated() && resource.data.caregiverId == request.auth.uid;
+    }
+
+    // TEMPORARY: Allow all authenticated users to read/write patient data
+    // TODO: Implement proper relationship-based permissions
+    match /patientData/{patientId}/{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}
