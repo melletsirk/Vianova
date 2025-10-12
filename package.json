@@ -16,6 +16,7 @@
     "vue-router": "^4.3.0"
   },
   "devDependencies": {
+    "@vercel/node": "^5.3.26",
     "@vitejs/plugin-vue": "^5.0.0",
     "@vitejs/plugin-vue-jsx": "^4.2.0",
     "autoprefixer": "^10.4.21",
