@@ -4,7 +4,7 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User, createUs
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { auth, db } from '@/firebase'
 
-type UserRole = 'patient' | 'caregiver' | 'professional' | null
+type UserRole = 'patient' | 'caregiver' | 'professional' | 'superadmin' | null
 
 interface UserData {
   uid: string

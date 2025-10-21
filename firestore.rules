@@ -12,35 +12,45 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isSuperAdmin() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin';
+    }
+
     // Users collection - allow all authenticated users to read/write their own data
+    // Super admin can read all users and delete any user
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || isSuperAdmin();
+      allow read: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
     }
 
     // Relationships collection
     match /relationships/{relationshipId} {
-      // Allow read if user is part of the relationship
+      // Allow read if user is part of the relationship or is super admin
       allow read: if isAuthenticated() && (
         resource.data.patientId == request.auth.uid ||
         resource.data.caregiverId == request.auth.uid ||
-        resource.data.professionalId == request.auth.uid
+        resource.data.professionalId == request.auth.uid ||
+        isSuperAdmin()
       );
 
       // Allow create if authenticated
       allow create: if isAuthenticated();
 
-      // Allow update if user is part of the relationship
+      // Allow update if user is part of the relationship or is super admin
       allow update: if isAuthenticated() && (
         resource.data.patientId == request.auth.uid ||
         resource.data.caregiverId == request.auth.uid ||
-        resource.data.professionalId == request.auth.uid
+        resource.data.professionalId == request.auth.uid ||
+        isSuperAdmin()
       );
 
-      // Allow delete if user is part of the relationship
+      // Allow delete if user is part of the relationship or is super admin
       allow delete: if isAuthenticated() && (
         resource.data.patientId == request.auth.uid ||
         resource.data.caregiverId == request.auth.uid ||
-        resource.data.professionalId == request.auth.uid
+        resource.data.professionalId == request.auth.uid ||
+        isSuperAdmin()
       );
     }
 
@@ -75,6 +85,24 @@ service cloud.firestore {
 
       // Allow delete if user is the caregiver who created the task
       allow delete: if isAuthenticated() && resource.data.caregiverId == request.auth.uid;
+    }
+
+    // Messages collection - allow authenticated users to read/write messages they sent or received
+    match /messages/{messageId} {
+      // Allow read if user is the sender or recipient
+      allow read: if isAuthenticated() && (
+        resource.data.professionalId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
+
+      // Allow create if authenticated (user creating message)
+      allow create: if isAuthenticated();
+
+      // Allow update if user is the sender or recipient
+      allow update: if isAuthenticated() && (
+        resource.data.professionalId == request.auth.uid ||
+        resource.data.patientId == request.auth.uid
+      );
     }
 
     // TEMPORARY: Allow all authenticated users to read/write patient data

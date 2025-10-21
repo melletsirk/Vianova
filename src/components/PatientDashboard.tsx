@@ -1,13 +1,17 @@
-import { defineComponent, ref, computed } from 'vue'
+import { defineComponent, ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePatientDataStore } from '@/stores/patientData'
+import { useMessagesStore } from '@/stores/messages'
 import AppButton from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import ConnectionManager from '@/components/ConnectionManager'
 import GameLauncher from '@/components/games/GameLauncher.vue'
+import BreathingExercise from '@/components/wellness/BreathingExercise.vue'
+import MeditationModal from '@/components/wellness/MeditationModal.vue'
+import { wellnessActivities, getWellnessActivity } from '@/components/wellness/wellnessData'
 import {
   Heart, BookOpen, MessageCircle, Music, Phone, Calendar, Activity,
-  ArrowLeft, Home, Sparkles, TrendingUp, Clock, Send, Sun, Moon, Sunrise, LogOut, Users
+  ArrowLeft, Home, Sparkles, TrendingUp, Clock, Send, Sun, Moon, Sunrise, LogOut, Users, AlertTriangle, ChevronRight
 } from 'lucide-vue-next'
 
 type TabId = 'home' | 'diary' | 'exercises' | 'contact' | 'connections'
@@ -136,6 +140,7 @@ export default defineComponent({
   setup(_, { emit }) {
     const authStore = useAuthStore()
     const patientDataStore = usePatientDataStore()
+    const messagesStore = useMessagesStore()
 
     // estado
     const moodLevel = ref<number>(6)
@@ -145,6 +150,27 @@ export default defineComponent({
     const activeTab = ref<TabId>('home')
     const showGamesModal = ref(false)
     const savingEntry = ref(false)
+    const showMessagesModal = ref(false)
+    const showWellnessModal = ref(false)
+    const currentWellnessActivity = ref<string | null>(null)
+
+    // Load patient data on mount
+    onMounted(async () => {
+      if (authStore.user?.uid) {
+        await patientDataStore.loadPatientData(authStore.user.uid)
+        await messagesStore.initializeForCurrentUser()
+      }
+    })
+
+    const openWellnessActivity = (activityId: string) => {
+      currentWellnessActivity.value = activityId
+      showWellnessModal.value = true
+    }
+
+    const closeWellnessModal = () => {
+      showWellnessModal.value = false
+      currentWellnessActivity.value = null
+    }
 
     const motivationalMessages = [
       'Cada día es una nueva oportunidad para encontrar pequeños momentos de paz.',
@@ -176,6 +202,18 @@ export default defineComponent({
       if (hour < 18) return 'Buenas tardes'
       return 'Buenas noches'
     }
+
+    // Computed for upcoming appointments
+    const upcomingAppointments = computed(() => {
+      const now = new Date()
+      return patientDataStore.appointments
+        .filter(appointment => {
+          const appointmentDateTime = new Date(appointment.date)
+          return appointmentDateTime > now && appointment.status === 'scheduled'
+        })
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        .slice(0, 3) // Show only next 3 appointments
+    })
 
     // Save daily entry
     const saveDailyEntry = async () => {
@@ -346,28 +384,69 @@ export default defineComponent({
                   </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-4">
-                  <div class="flex items-center gap-4 p-3 rounded-2xl border border-brand-400/40 bg-brand-50">
-                    <div class="w-10 h-10 rounded-xl grid place-items-center text-onPrimary"
-                      style="background-image: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                      <Clock class="h-5 w-5" />
-                    </div>
-                    <div class="flex-1">
-                      <p class="font-medium text-onSurface">Control médico</p>
-                      <p class="text-sm text-onSurface/70">Dr. García</p>
-                    </div>
-                    <Badge class="bg-brand-600 text-onPrimary border-brand-600">Mañana 10:00</Badge>
-                  </div>
+                  {upcomingAppointments.value.length > 0 ? upcomingAppointments.value.map(appointment => {
+                    const appointmentDate = new Date(appointment.date)
+                    const isToday = appointmentDate.toDateString() === new Date().toDateString()
+                    const isTomorrow = appointmentDate.toDateString() === new Date(Date.now() + 86400000).toDateString()
 
-                  <div class="flex items-center gap-4 p-3 rounded-2xl border border-outline/40 bg-surface">
-                    <div class="w-10 h-10 rounded-xl grid place-items-center bg-[rgb(var(--color-success))]">
-                      <Heart class="h-5 w-5 text-white" />
+                    let dateLabel = appointmentDate.toLocaleDateString('es-ES', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long'
+                    })
+
+                    if (isToday) {
+                      dateLabel = 'Hoy'
+                    } else if (isTomorrow) {
+                      dateLabel = 'Mañana'
+                    }
+
+                    const timeLabel = `${dateLabel} ${appointment.time}`
+
+                    // Get icon and color based on appointment type
+                    const getAppointmentIcon = (type: string) => {
+                      switch (type) {
+                        case 'consultation': return Clock
+                        case 'therapy': return Heart
+                        case 'checkup': return Activity
+                        case 'emergency': return AlertTriangle
+                        default: return Calendar
+                      }
+                    }
+
+                    const getAppointmentColor = (type: string) => {
+                      switch (type) {
+                        case 'consultation': return 'rgb(var(--brand-500))'
+                        case 'therapy': return 'rgb(var(--color-success))'
+                        case 'checkup': return 'rgb(var(--color-success))'
+                        case 'emergency': return 'rgb(var(--color-error))'
+                        default: return 'rgb(var(--brand-500))'
+                      }
+                    }
+
+                    const IconComponent = getAppointmentIcon(appointment.type)
+                    const backgroundStyle = getAppointmentColor(appointment.type)
+
+                    return (
+                      <div class="flex items-center gap-4 p-3 rounded-2xl border border-outline/40 bg-surface">
+                        <div class="w-10 h-10 rounded-xl grid place-items-center"
+                          style={{ background: backgroundStyle }}>
+                          <IconComponent class="h-5 w-5 text-white" />
+                        </div>
+                        <div class="flex-1">
+                          <p class="font-medium text-onSurface">{appointment.title}</p>
+                          <p class="text-sm text-onSurface/70">{appointment.professionalName || 'Profesional'}</p>
+                        </div>
+                        <Badge class="bg-brand-600 text-onPrimary border-brand-600">{timeLabel}</Badge>
+                      </div>
+                    )
+                  }) : (
+                    <div class="text-center py-8">
+                      <Calendar class="h-12 w-12 text-onSurface/40 mx-auto mb-3" />
+                      <p class="text-onSurface/70">No hay citas programadas</p>
+                      <p class="text-sm text-onSurface/50">Tus citas aparecerán aquí cuando sean programadas</p>
                     </div>
-                    <div class="flex-1">
-                      <p class="font-medium text-onSurface">Terapia psicológica</p>
-                      <p class="text-sm text-onSurface/70">Lic. Martínez</p>
-                    </div>
-                    <Badge class="bg-[rgb(var(--color-success))] text-white border-[rgb(var(--color-success))]">Viernes 15:00</Badge>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -490,94 +569,44 @@ export default defineComponent({
           )}
 
           {/* EXERCISES */}
-          {activeTab.value === 'exercises' && (
-            <div class="space-y-6">
-              <div class="text-center space-y-2">
-                <h2 class="text-2xl font-semibold">Bienestar</h2>
-                <p class="text-onSurface/70">Ejercicios para tu paz interior</p>
-              </div>
+      {activeTab.value === 'exercises' && (
+        <div class="space-y-6">
+          <div class="text-center space-y-2">
+            <h2 class="text-2xl font-semibold">Bienestar</h2>
+            <p class="text-onSurface/70">Ejercicios para tu paz interior</p>
+          </div>
 
-              <div class="grid gap-4">
-                {/* Respiración: éxito (calma) */}
-                <Card class="rounded-2xl border border-outline/40 overflow-hidden bg-surface">
-                  <CardContent class="p-6">
-                    <div class="flex items-center gap-4">
-                      <div class="w-14 h-14 rounded-2xl grid place-items-center shadow-lg bg-[rgb(var(--color-success))]">
-                        <Heart class="h-7 w-7 text-white" />
-                      </div>
-                      <div class="flex-1">
-                        <h3 class="font-semibold mb-1 text-onSurface">Respiración Consciente</h3>
-                        <p class="text-sm text-onSurface/70 mb-3">5 minutos de relajación profunda</p>
-                        <AppButton class="rounded-xl px-3 py-1 text-onPrimary"
-                          style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                          Comenzar
-                        </AppButton>
-                      </div>
+          <div class="grid gap-4">
+            {wellnessActivities.map(activity => (
+              <Card
+                key={activity.id}
+                class="rounded-2xl border border-outline/40 overflow-hidden bg-surface cursor-pointer transition-all duration-200 active:scale-[0.98]"
+                onClick={() => openWellnessActivity(activity.id)}
+              >
+                <CardContent class="p-6">
+                  <div class="flex items-center gap-4">
+                    <div
+                      class="w-14 h-14 rounded-2xl grid place-items-center shadow-lg"
+                      style={{ background: activity.iconBg }}
+                    >
+                      {activity.icon === 'Heart' && <Heart class="h-7 w-7 text-white" />}
+                      {activity.icon === 'Music' && <Music class="h-7 w-7 text-white" />}
+                      {activity.icon === 'BookOpen' && <BookOpen class="h-7 w-7 text-white" />}
+                      {activity.icon === 'Sparkles' && <Sparkles class="h-7 w-7 text-white" />}
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Musical: brand */}
-                <Card class="rounded-2xl border border-outline/40 overflow-hidden bg-surface">
-                  <CardContent class="p-6">
-                    <div class="flex items-center gap-4">
-                      <div class="w-14 h-14 rounded-2xl grid place-items-center shadow-lg"
-                        style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-600)));">
-                        <Music class="h-7 w-7 text-onPrimary" />
-                      </div>
-                      <div class="flex-1">
-                        <h3 class="font-semibold mb-1 text-onSurface">Relajación Musical</h3>
-                        <p class="text-sm text-onSurface/70 mb-3">Música terapéutica especializada</p>
-                        <AppButton class="rounded-xl px-3 py-1 text-onPrimary"
-                          style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                          Reproducir
-                        </AppButton>
-                      </div>
+                    <div class="flex-1">
+                      <h3 class="font-semibold mb-1 text-onSurface">{activity.title}</h3>
+                      <p class="text-sm text-onSurface/70 mb-3">{activity.subtitle}</p>
+                      <div class="text-xs text-brand-600 font-medium">{activity.buttonText}</div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Meditación: éxito */}
-                <Card class="rounded-2xl border border-outline/40 overflow-hidden bg-surface">
-                  <CardContent class="p-6">
-                    <div class="flex items-center gap-4">
-                      <div class="w-14 h-14 rounded-2xl grid place-items-center shadow-lg bg-[rgb(var(--color-success))]">
-                        <BookOpen class="h-7 w-7 text-white" />
-                      </div>
-                      <div class="flex-1">
-                        <h3 class="font-semibold mb-1 text-onSurface">Meditación Guiada</h3>
-                        <p class="text-sm text-onSurface/70 mb-3">Sesiones de mindfulness</p>
-                        <AppButton class="rounded-xl px-3 py-1 text-onPrimary"
-                          style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                          Iniciar
-                        </AppButton>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Reflexión espiritual: brand */}
-                <Card class="rounded-2xl border border-outline/40 overflow-hidden bg-surface">
-                  <CardContent class="p-6">
-                    <div class="flex items-center gap-4">
-                      <div class="w-14 h-14 rounded-2xl grid place-items-center shadow-lg"
-                        style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-600)));">
-                        <Sparkles class="h-7 w-7 text-onPrimary" />
-                      </div>
-                      <div class="flex-1">
-                        <h3 class="font-semibold mb-1 text-onSurface">Reflexión Espiritual</h3>
-                        <p class="text-sm text-onSurface/70 mb-3">Momentos de conexión interna</p>
-                        <AppButton class="rounded-xl px-3 py-1 text-onPrimary"
-                          style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                          Comenzar
-                        </AppButton>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
+                    <ChevronRight class="h-5 w-5 text-onSurface/40" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
 
           {/* CONNECTIONS */}
@@ -628,42 +657,54 @@ export default defineComponent({
                   </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-4">
-                  <div class="p-4 rounded-2xl border border-brand-400/40 bg-brand-50">
-                    <div class="flex items-center gap-3 mb-2">
-                      <div class="w-8 h-8 rounded-full grid place-items-center text-onPrimary"
-                        style="background-image: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                        <span class="text-sm font-medium">Dr</span>
-                      </div>
-                      <div class="flex-1">
-                        <p class="font-medium text-onSurface">Dr. García</p>
-                        <p class="text-xs text-onSurface/60">Hace 2 horas</p>
-                      </div>
-                    </div>
-                    <p class="text-sm text-onSurface/80">
-                      Recuerda tomar tu medicación a las 2 PM. ¿Cómo te has sentido hoy?
-                    </p>
-                  </div>
+                  {messagesStore.recentMessages.length > 0 ? (
+                    <>
+                      {messagesStore.recentMessages.map(message => (
+                        <div class="p-4 rounded-2xl border border-brand-400/40 bg-brand-50">
+                          <div class="flex items-center gap-3 mb-2">
+                            <div class="w-8 h-8 rounded-full grid place-items-center text-onPrimary"
+                              style="background-image: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
+                              <span class="text-sm font-medium">Dr</span>
+                            </div>
+                            <div class="flex-1">
+                              <p class="font-medium text-onSurface">{message.professionalName}</p>
+                              <p class="text-xs text-onSurface/60">
+                                {new Date(message.createdAt).toLocaleDateString('es-ES', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <p class="text-sm text-onSurface/80 mb-2">
+                            <strong>{message.title}:</strong> {message.content}
+                          </p>
+                          {!message.read && (
+                            <Badge class="bg-[rgb(var(--color-error))] text-white border-[rgb(var(--color-error))] text-xs">
+                              Nuevo
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
 
-                  <div class="p-4 rounded-2xl border border-outline/40 bg-surface">
-                    <div class="flex items-center gap-3 mb-2">
-                      <div class="w-8 h-8 bg-[rgb(var(--color-success))] rounded-full grid place-items-center">
-                        <span class="text-white text-sm font-medium">M</span>
-                      </div>
-                      <div class="flex-1">
-                        <p class="font-medium text-onSurface">María (Hija)</p>
-                        <p class="text-xs text-onSurface/60">Hace 30 min</p>
-                      </div>
+                      <AppButton
+                        class="w-full h-12 rounded-2xl touch-manipulation text-onPrimary"
+                        style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));"
+                        onClick={() => (showMessagesModal.value = true)}
+                      >
+                        <MessageCircle class="h-5 w-5 mr-2 text-onPrimary" />
+                        Ver Todos los Mensajes
+                      </AppButton>
+                    </>
+                  ) : (
+                    <div class="text-center py-8">
+                      <MessageCircle class="h-12 w-12 text-onSurface/40 mx-auto mb-3" />
+                      <p class="text-onSurface/70">No tienes mensajes nuevos</p>
+                      <p class="text-sm text-onSurface/50">Los mensajes de tus profesionales aparecerán aquí</p>
                     </div>
-                    <p class="text-sm text-onSurface/80">
-                      Te amo, papá. Llego en una hora para acompañarte. ❤️
-                    </p>
-                  </div>
-
-                  <AppButton class="w-full h-12 rounded-2xl touch-manipulation text-onPrimary"
-                    style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
-                    <MessageCircle class="h-5 w-5 mr-2 text-onPrimary" />
-                    Ver Todos los Mensajes
-                  </AppButton>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -717,6 +758,124 @@ export default defineComponent({
               <div class="p-3 sm:p-4 max-h-[calc(95vh-120px)] sm:max-h-[calc(90vh-140px)] overflow-y-auto">
                 <GameLauncher />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Messages Modal */}
+        {showMessagesModal.value && (
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4">
+            <div class="bg-surface rounded-2xl w-full max-w-sm sm:max-w-md lg:max-w-lg max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl">
+              {/* Header */}
+              <div class="p-3 sm:p-4 border-b border-outline/40 flex items-center justify-between">
+                <div class="flex items-center gap-2 sm:gap-3">
+                  <MessageCircle class="h-5 w-5 text-brand-600" />
+                  <div>
+                    <h3 class="font-semibold text-onSurface text-base sm:text-lg">Historial de Mensajes</h3>
+                    <p class="text-xs sm:text-sm text-onSurface/60">Mensajes de tus profesionales</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => (showMessagesModal.value = false)}
+                  class="p-2 hover:bg-surfaceVariant rounded-lg transition-colors touch-manipulation"
+                >
+                  <span class="text-lg sm:text-xl">✕</span>
+                </button>
+              </div>
+
+              {/* Messages Content */}
+              <div class="p-3 sm:p-4 max-h-[calc(95vh-120px)] sm:max-h-[calc(90vh-140px)] overflow-y-auto">
+                {messagesStore.messages.length > 0 ? (
+                  <div class="space-y-4">
+                    {messagesStore.messages
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .map(message => (
+                        <div
+                          key={message.id}
+                          class="p-4 rounded-2xl border bg-surface"
+                          style={{ borderColor: message.read ? 'rgb(var(--outline)/0.4)' : 'rgb(var(--brand-400))/0.4)' }}
+                        >
+                          <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-full grid place-items-center text-onPrimary"
+                              style="background-image: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
+                              <span class="text-sm font-medium">Dr</span>
+                            </div>
+                            <div class="flex-1">
+                              <p class="font-medium text-onSurface">{message.professionalName}</p>
+                              <p class="text-xs text-onSurface/60">
+                                {new Date(message.createdAt).toLocaleDateString('es-ES', {
+                                  weekday: 'long',
+                                  day: 'numeric',
+                                  month: 'long',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                            {!message.read && (
+                              <Badge class="bg-[rgb(var(--color-error))] text-white border-[rgb(var(--color-error))] text-xs">
+                                Nuevo
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div class="mb-3">
+                            <p class="font-medium text-onSurface text-sm mb-1">{message.title}</p>
+                            <p class="text-sm text-onSurface/80">{message.content}</p>
+                          </div>
+
+                          {!message.read && (
+                            <button
+                              class="w-full h-8 rounded-xl text-xs text-onPrimary inline-flex items-center justify-center rounded-xl px-4 py-2"
+                              style="background-image: linear-gradient(90deg, rgb(var(--brand-500)), rgb(var(--brand-600)));"
+                              onClick={async () => {
+                                await messagesStore.markAsRead(message.id)
+                              }}
+                            >
+                              Marcar como leído
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div class="text-center py-12">
+                    <MessageCircle class="h-16 w-16 text-onSurface/40 mx-auto mb-4" />
+                    <h3 class="text-lg font-semibold text-onSurface mb-2">No hay mensajes</h3>
+                    <p class="text-onSurface/60">Los mensajes de tus profesionales aparecerán aquí</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Wellness Modal */}
+        {showWellnessModal.value && currentWellnessActivity.value && (
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6">
+            <div class="bg-surface rounded-3xl w-full max-w-md sm:max-w-lg lg:max-w-xl max-h-[90vh] sm:max-h-[85vh] overflow-hidden shadow-2xl mx-auto">
+              {currentWellnessActivity.value === 'breathing' ? (
+                <BreathingExercise onClose={closeWellnessModal} />
+              ) : (
+                <MeditationModal
+                  type={getWellnessActivity(currentWellnessActivity.value)?.type || 'meditation'}
+                  title={getWellnessActivity(currentWellnessActivity.value)?.title || ''}
+                  subtitle={getWellnessActivity(currentWellnessActivity.value)?.subtitle || ''}
+                  audioSrc={getWellnessActivity(currentWellnessActivity.value)?.audioSrc}
+                  audioTitle={getWellnessActivity(currentWellnessActivity.value)?.audioTitle}
+                  textContent={getWellnessActivity(currentWellnessActivity.value)?.textContent}
+                  instructions={getWellnessActivity(currentWellnessActivity.value)?.instructions}
+                  buttonText={getWellnessActivity(currentWellnessActivity.value)?.buttonText || ''}
+                  onClose={closeWellnessModal}
+                  onAction={() => {
+                    // Handle action based on activity type
+                    console.log('Action triggered for:', currentWellnessActivity.value)
+                  }}
+                  onAudioEnded={() => {
+                    console.log('Audio ended for:', currentWellnessActivity.value)
+                  }}
+                />
+              )}
             </div>
           </div>
         )}

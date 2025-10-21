@@ -180,6 +180,8 @@ export default defineComponent({
     loadDeletedTasksFromStorage()
 
     const showAddTaskModal = ref(false)
+    const showSupportModal = ref(false)
+    const selectedSupport = ref<'palliative' | 'emotional' | 'pain' | null>(null)
     const newTask = ref({
       time: '09:00',
       task: '',
@@ -987,7 +989,8 @@ export default defineComponent({
                   </CardTitle>
                 </CardHeader>
                 <CardContent class="space-y-3">
-                  <div class="flex items-center gap-4 p-4 rounded-2xl border border-brand-400/40 bg-brand-50">
+                  <div class="flex items-center gap-4 p-4 rounded-2xl border border-brand-400/40 bg-brand-50 cursor-pointer transition-all duration-200 active:scale-[0.98]"
+                       onClick={() => (showSupportModal.value = true, selectedSupport.value = 'palliative')}>
                     <div class="w-12 h-12 rounded-2xl grid place-items-center"
                          style="background-image: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-600)));">
                       <BookOpen class="h-6 w-6 text-onPrimary" />
@@ -999,7 +1002,8 @@ export default defineComponent({
                     <ChevronRight class="h-5 w-5 text-onSurface/40" />
                   </div>
 
-                  <div class="flex items-center gap-4 p-4 rounded-2xl border border-outline/40 bg-surface">
+                  <div class="flex items-center gap-4 p-4 rounded-2xl border border-outline/40 bg-surface cursor-pointer transition-all duration-200 active:scale-[0.98]"
+                       onClick={() => (showSupportModal.value = true, selectedSupport.value = 'emotional')}>
                     <div class="w-12 h-12 rounded-2xl grid place-items-center"
                         style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-600)));">
                       <Heart class="h-6 w-6 text-white" />
@@ -1011,7 +1015,8 @@ export default defineComponent({
                     <ChevronRight class="h-5 w-5 text-onSurface/40" />
                   </div>
 
-                  <div class="flex items-center gap-4 p-4 rounded-2xl border border-outline/40 bg-surface">
+                  <div class="flex items-center gap-4 p-4 rounded-2xl border border-outline/40 bg-surface cursor-pointer transition-all duration-200 active:scale-[0.98]"
+                       onClick={() => (showSupportModal.value = true, selectedSupport.value = 'pain')}>
                     <div class="w-12 h-12 rounded-2xl grid place-items-center"
                         style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-600)));">
                       <Shield class="h-6 w-6 text-onPrimary" />
@@ -1120,6 +1125,217 @@ export default defineComponent({
                 >
                   Añadir Tarea
                 </AppButton>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Support Modal */}
+        {showSupportModal.value && selectedSupport.value && (
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div class="bg-surface rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
+              {/* Header */}
+              <div class="p-4 sm:p-6 border-b border-outline/40 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  {selectedSupport.value === 'palliative' && <BookOpen class="h-6 w-6 text-brand-600" />}
+                  {selectedSupport.value === 'emotional' && <Heart class="h-6 w-6 text-[rgb(var(--color-error))]" />}
+                  {selectedSupport.value === 'pain' && <Shield class="h-6 w-6 text-[rgb(var(--color-success))]" />}
+                  <div>
+                    <h3 class="font-semibold text-onSurface text-lg sm:text-xl">
+                      {selectedSupport.value === 'palliative' && 'Guía de Cuidados Paliativos'}
+                      {selectedSupport.value === 'emotional' && 'Apoyo Emocional'}
+                      {selectedSupport.value === 'pain' && 'Gestión del Dolor'}
+                    </h3>
+                    <p class="text-sm text-onSurface/60">
+                      {selectedSupport.value === 'palliative' && 'Consejos prácticos para cuidadores'}
+                      {selectedSupport.value === 'emotional' && 'Grupos de apoyo para familiares'}
+                      {selectedSupport.value === 'pain' && 'Técnicas de alivio y confort'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => (showSupportModal.value = false, selectedSupport.value = null)}
+                  class="p-2 hover:bg-surfaceVariant rounded-lg transition-colors touch-manipulation"
+                >
+                  <span class="text-xl">✕</span>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div class="p-4 sm:p-6 max-h-[calc(90vh-120px)] overflow-y-auto">
+                {selectedSupport.value === 'palliative' && (
+                  <div class="space-y-6">
+                    <div class="prose prose-sm max-w-none text-onSurface">
+                      <h4 class="text-lg font-semibold text-brand-600 mb-4">Principios Básicos de los Cuidados Paliativos</h4>
+
+                      <div class="grid gap-4">
+                        <div class="p-4 bg-brand-50 rounded-xl border border-brand-200">
+                          <h5 class="font-semibold text-brand-700 mb-2">1. Comunicación Abierta</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Mantén una comunicación honesta y abierta con el paciente sobre su condición, tratamientos y opciones.
+                            Escucha activamente sus preocupaciones y preferencias.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">2. Manejo de Síntomas</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Controla el dolor, náuseas, fatiga y otros síntomas. Trabaja con el equipo médico para ajustar
+                            tratamientos según sea necesario.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">3. Apoyo Emocional</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Proporciona apoyo emocional tanto al paciente como a la familia. Reconoce y valida sus emociones.
+                            Considera apoyo psicológico profesional cuando sea necesario.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">4. Cuidado Espiritual</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Respeta las creencias espirituales del paciente. Facilita el acceso a apoyo espiritual si lo desea.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">5. Planificación Anticipada</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Ayuda al paciente a expresar sus deseos sobre tratamientos futuros, cuidados al final de la vida
+                            y asuntos legales a través de directivas anticipadas.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div class="mt-6 p-4 bg-[rgb(var(--color-success))/0.1] rounded-xl border border-[rgb(var(--color-success))/0.3]">
+                        <h5 class="font-semibold text-[rgb(var(--color-success))] mb-2">💡 Consejos Prácticos</h5>
+                        <ul class="text-sm text-onSurface/80 space-y-1">
+                          <li>• Mantén rutinas diarias para proporcionar estabilidad</li>
+                          <li>• Crea un ambiente cómodo y personal</li>
+                          <li>• Coordina con el equipo de salud para tratamientos en casa</li>
+                          <li>• Cuida tu propio bienestar para poder cuidar mejor</li>
+                          <li>• Documenta síntomas y cambios para compartir con profesionales</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSupport.value === 'emotional' && (
+                  <div class="space-y-6">
+                    <div class="prose prose-sm max-w-none text-onSurface">
+                      <h4 class="text-lg font-semibold text-[rgb(var(--color-error))] mb-4">Apoyo Emocional para Familiares</h4>
+
+                      <div class="grid gap-4">
+                        <div class="p-4 bg-[rgb(var(--color-error))/0.1] rounded-xl border border-[rgb(var(--color-error))/0.3]">
+                          <h5 class="font-semibold text-[rgb(var(--color-error))] mb-2">Reconociendo tus Emociones</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Es normal sentir una amplia gama de emociones: tristeza, ira, culpa, miedo, confusión.
+                            Estas emociones son una respuesta natural al cuidar a un ser querido.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Grupos de Apoyo</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Conectar con otros cuidadores que están pasando por experiencias similares puede ser
+                            muy reconfortante. Comparte experiencias y aprende de otros.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Apoyo Profesional</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Considera terapia individual o familiar. Los profesionales pueden ayudar a procesar
+                            emociones complejas y desarrollar estrategias de afrontamiento.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Cuidando tu Bienestar</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Recuerda que para cuidar bien a otros, debes cuidar de ti mismo. Establece límites,
+                            toma descansos y busca apoyo cuando lo necesites.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div class="mt-6 p-4 bg-brand-50 rounded-xl border border-brand-200">
+                        <h5 class="font-semibold text-brand-700 mb-2">📞 Recursos Disponibles</h5>
+                        <ul class="text-sm text-onSurface/80 space-y-1">
+                          <li>• Líneas de ayuda emocional 24/7</li>
+                          <li>• Grupos de apoyo locales para cuidadores</li>
+                          <li>• Terapia individual y familiar</li>
+                          <li>• Apoyo espiritual y religioso</li>
+                          <li>• Programas de respiro para cuidadores</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedSupport.value === 'pain' && (
+                  <div class="space-y-6">
+                    <div class="prose prose-sm max-w-none text-onSurface">
+                      <h4 class="text-lg font-semibold text-[rgb(var(--color-success))] mb-4">Gestión del Dolor</h4>
+
+                      <div class="grid gap-4">
+                        <div class="p-4 bg-[rgb(var(--color-success))/0.1] rounded-xl border border-[rgb(var(--color-success))/0.3]">
+                          <h5 class="font-semibold text-[rgb(var(--color-success))] mb-2">Evaluación del Dolor</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Usa escalas de dolor (0-10) para comunicar la intensidad. Observa cambios en el comportamiento,
+                            expresiones faciales y patrones de sueño que puedan indicar dolor.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Medicamentos</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Administra medicamentos según lo prescrito. Mantén un registro de dosis y efectos.
+                            Reporta cualquier efecto secundario al equipo médico.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Técnicas No Farmacológicas</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Masajes suaves, compresas frías/calientes, cambios de posición, música relajante,
+                            técnicas de respiración y distracción pueden ayudar a manejar el dolor.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Posicionamiento</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Cambia la posición del paciente regularmente para prevenir úlceras y mejorar el confort.
+                            Usa almohadas de apoyo y mantén una buena alineación corporal.
+                          </p>
+                        </div>
+
+                        <div class="p-4 bg-surface rounded-xl border border-outline/40">
+                          <h5 class="font-semibold text-onSurface mb-2">Ambiente</h5>
+                          <p class="text-sm text-onSurface/80">
+                            Crea un ambiente tranquilo con iluminación adecuada, temperatura confortable y
+                            reducción de ruidos molestos.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div class="mt-6 p-4 bg-brand-50 rounded-xl border border-brand-200">
+                        <h5 class="font-semibold text-brand-700 mb-2">⚠️ Cuándo Buscar Ayuda</h5>
+                        <ul class="text-sm text-onSurface/80 space-y-1">
+                          <li>• Dolor que no responde a tratamientos habituales</li>
+                          <li>• Cambios en el patrón de dolor</li>
+                          <li>• Efectos secundarios de medicamentos</li>
+                          <li>• Dificultad para controlar el dolor en casa</li>
+                          <li>• Preocupaciones sobre adicción a analgésicos</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

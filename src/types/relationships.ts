@@ -1,6 +1,6 @@
 // Types for user relationships and invitations
 
-export type UserRole = 'patient' | 'caregiver' | 'professional'
+export type UserRole = 'patient' | 'caregiver' | 'professional' | 'superadmin'
 
 export type RelationshipStatus = 'pending' | 'active' | 'rejected' | 'cancelled'
 
@@ -147,6 +147,20 @@ export interface PatientStats {
   unresolvedAlerts: number
 }
 
+export interface Message {
+  id: string
+  patientId: string
+  professionalId: string
+  professionalName: string
+  type: 'recommendation' | 'followup' | 'general'
+  title: string
+  content: string
+  read: boolean
+  readAt?: Date
+  createdAt: Date
+  updatedAt?: Date
+}
+
 // Care tasks for caregivers
 export interface CareTask {
   id: string
@@ -166,7 +180,8 @@ export interface CareTask {
 export const CONNECTION_PERMISSIONS: Record<UserRole, UserRole[]> = {
   patient: ['caregiver', 'professional'],
   caregiver: ['patient', 'professional'],
-  professional: ['patient']
+  professional: ['patient'],
+  superadmin: [] // Super admin doesn't connect with regular users
 }
 
 // Check if a role can connect with another role

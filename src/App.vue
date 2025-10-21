@@ -6,6 +6,7 @@
     import PatientDashboard from '@/components/PatientDashboard';
     import CaregiverDashboard from '@/components/CaregiverDashboard';
     import ProfessionalDashboard from '@/components/ProfessionalDashboard';
+    import SuperAdminDashboard from '@/components/SuperAdminDashboard';
     const authStore = useAuthStore();
     const selectedRole = ref<'patient' | 'caregiver' | 'professional'>('patient');
     const isSelectingRole = ref(false);
@@ -95,6 +96,7 @@
     <PatientDashboard v-else-if="authStore.userRole === 'patient'" />
     <CaregiverDashboard v-else-if="authStore.userRole === 'caregiver'" />
     <ProfessionalDashboard v-else-if="authStore.userRole === 'professional'" />
+    <SuperAdminDashboard v-else-if="authStore.userRole === 'superadmin'" />
 </template>
 <style>
 .gradient-calm {
