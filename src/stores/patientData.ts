@@ -13,7 +13,8 @@ import {
   Timestamp,
   addDoc,
   deleteDoc,
-  writeBatch
+  writeBatch,
+  onSnapshot
 } from 'firebase/firestore'
 import { db } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -37,6 +38,9 @@ export const usePatientDataStore = defineStore('patientData', () => {
   const alerts = ref<Alert[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Real-time listeners management
+  const unsubscribers = ref<Record<string, (() => void)[]>>({})
 
   // Computed
   const patientStats = computed((): PatientStats => {
@@ -166,7 +170,7 @@ export const usePatientDataStore = defineStore('patientData', () => {
   }
 
   /**
-   * Load daily entries for a patient
+   * Load daily entries for a patient (one-time)
    */
   const loadDailyEntries = async (patientId: string): Promise<{ success: boolean; error?: string }> => {
     loading.value = true
@@ -195,7 +199,41 @@ export const usePatientDataStore = defineStore('patientData', () => {
   }
 
   /**
-   * Load medications for a patient
+   * Load daily entries for a patient with real-time updates
+   */
+  const loadDailyEntriesRealtime = (patientId: string, onUpdate?: (entries: DailyEntry[]) => void) => {
+    const entriesRef = collection(db, 'patientData', patientId, 'dailyEntries')
+    const q = query(entriesRef, orderBy('date', 'desc'))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const entries = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+        updatedAt: doc.data().updatedAt?.toDate() || new Date()
+      })) as DailyEntry[]
+
+      // Update global store
+      dailyEntries.value = entries
+
+      // Call callback if provided (for cache updates)
+      if (onUpdate) {
+        onUpdate(entries)
+      }
+    }, (err) => {
+      error.value = err.message
+      console.error('Error in daily entries realtime listener:', err)
+    })
+
+    // Store unsubscribe function for cleanup
+    if (!unsubscribers.value[patientId]) {
+      unsubscribers.value[patientId] = []
+    }
+    unsubscribers.value[patientId].push(unsubscribe)
+  }
+
+  /**
+   * Load medications for a patient (one-time)
    */
   const loadMedications = async (patientId: string): Promise<{ success: boolean; error?: string }> => {
     loading.value = true
@@ -225,7 +263,42 @@ export const usePatientDataStore = defineStore('patientData', () => {
   }
 
   /**
-   * Load appointments for a patient
+   * Load medications for a patient with real-time updates
+   */
+  const loadMedicationsRealtime = (patientId: string, onUpdate?: (medications: Medication[]) => void) => {
+    const medsRef = collection(db, 'patientData', patientId, 'medications')
+    const q = query(medsRef, where('active', '==', true), orderBy('createdAt', 'desc'))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const meds = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        startDate: doc.data().startDate?.toDate() || new Date(),
+        endDate: doc.data().endDate?.toDate(),
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+      })) as Medication[]
+
+      // Update global store
+      medications.value = meds
+
+      // Call callback if provided (for cache updates)
+      if (onUpdate) {
+        onUpdate(meds)
+      }
+    }, (err) => {
+      error.value = err.message
+      console.error('Error in medications realtime listener:', err)
+    })
+
+    // Store unsubscribe function for cleanup
+    if (!unsubscribers.value[patientId]) {
+      unsubscribers.value[patientId] = []
+    }
+    unsubscribers.value[patientId].push(unsubscribe)
+  }
+
+  /**
+   * Load appointments for a patient (one-time)
    */
   const loadAppointments = async (patientId: string): Promise<{ success: boolean; error?: string }> => {
     loading.value = true
@@ -254,7 +327,41 @@ export const usePatientDataStore = defineStore('patientData', () => {
   }
 
   /**
-   * Load alerts for a patient
+   * Load appointments for a patient with real-time updates
+   */
+  const loadAppointmentsRealtime = (patientId: string, onUpdate?: (appointments: Appointment[]) => void) => {
+    const apptsRef = collection(db, 'patientData', patientId, 'appointments')
+    const q = query(apptsRef, orderBy('date', 'desc'))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const appts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date(),
+        createdAt: doc.data().createdAt?.toDate() || new Date()
+      })) as Appointment[]
+
+      // Update global store
+      appointments.value = appts
+
+      // Call callback if provided (for cache updates)
+      if (onUpdate) {
+        onUpdate(appts)
+      }
+    }, (err) => {
+      error.value = err.message
+      console.error('Error in appointments realtime listener:', err)
+    })
+
+    // Store unsubscribe function for cleanup
+    if (!unsubscribers.value[patientId]) {
+      unsubscribers.value[patientId] = []
+    }
+    unsubscribers.value[patientId].push(unsubscribe)
+  }
+
+  /**
+   * Load alerts for a patient (one-time)
    */
   const loadAlerts = async (patientId: string): Promise<{ success: boolean; error?: string }> => {
     loading.value = true
@@ -280,6 +387,40 @@ export const usePatientDataStore = defineStore('patientData', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * Load alerts for a patient with real-time updates
+   */
+  const loadAlertsRealtime = (patientId: string, onUpdate?: (alerts: Alert[]) => void) => {
+    const alertsRef = collection(db, 'patientData', patientId, 'alerts')
+    const q = query(alertsRef, where('resolved', '==', false), orderBy('createdAt', 'desc'))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const alrts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+        resolvedAt: doc.data().resolvedAt?.toDate()
+      })) as Alert[]
+
+      // Update global store
+      alerts.value = alrts
+
+      // Call callback if provided (for cache updates)
+      if (onUpdate) {
+        onUpdate(alrts)
+      }
+    }, (err) => {
+      error.value = err.message
+      console.error('Error in alerts realtime listener:', err)
+    })
+
+    // Store unsubscribe function for cleanup
+    if (!unsubscribers.value[patientId]) {
+      unsubscribers.value[patientId] = []
+    }
+    unsubscribers.value[patientId].push(unsubscribe)
   }
 
   /**
@@ -405,6 +546,16 @@ export const usePatientDataStore = defineStore('patientData', () => {
     error.value = null
   }
 
+  /**
+   * Cleanup all real-time listeners
+   */
+  const cleanupListeners = () => {
+    Object.values(unsubscribers.value).forEach(unsubs => {
+      unsubs.forEach(unsub => unsub())
+    })
+    unsubscribers.value = {}
+  }
+
   return {
     // State
     dailyEntries,
@@ -422,13 +573,18 @@ export const usePatientDataStore = defineStore('patientData', () => {
     // Actions
     saveDailyEntry,
     loadDailyEntries,
+    loadDailyEntriesRealtime,
     loadMedications,
+    loadMedicationsRealtime,
     loadAppointments,
+    loadAppointmentsRealtime,
     loadAlerts,
+    loadAlertsRealtime,
     createAlert,
     resolveAlert,
     loadPatientData,
     initializeForCurrentUser,
-    clearData
+    clearData,
+    cleanupListeners
   }
 })

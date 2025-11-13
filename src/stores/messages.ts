@@ -12,7 +12,8 @@ import {
   orderBy,
   Timestamp,
   addDoc,
-  writeBatch
+  writeBatch,
+  onSnapshot
 } from 'firebase/firestore'
 import { db } from '@/firebase'
 import { useAuthStore } from './auth'
@@ -27,6 +28,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const messages = ref<Message[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const unsubscribeMessages = ref<(() => void) | null>(null)
 
   // Computed
   const recentMessages = computed(() => {
@@ -253,18 +255,139 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   /**
+   * Load messages with real-time updates
+   */
+  const loadMessagesRealtime = (): (() => void) | null => {
+    if (!authStore.user?.uid) return null
+
+    // Clean up existing listener
+    if (unsubscribeMessages.value) {
+      unsubscribeMessages.value()
+    }
+
+    let q
+
+    if (authStore.userData?.role === 'patient') {
+      // For patients, load messages from connected professionals only
+      const connectedProfIds = getConnectedProfessionalIds()
+      if (connectedProfIds.length === 0) {
+        // If no connected professionals yet, set up a listener that will be updated when relationships load
+        // For now, return null and we'll set up the listener later when relationships are available
+        messages.value = []
+        return null
+      }
+
+      q = query(
+        collection(db, 'messages'),
+        where('patientId', '==', authStore.user.uid),
+        where('professionalId', 'in', connectedProfIds),
+        orderBy('createdAt', 'desc')
+      )
+    } else if (authStore.userData?.role === 'professional') {
+      // For professionals, load messages they've sent
+      q = query(
+        collection(db, 'messages'),
+        where('professionalId', '==', authStore.user.uid),
+        orderBy('createdAt', 'desc')
+      )
+    } else {
+      return null
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      messages.value = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+        readAt: doc.data().readAt?.toDate(),
+        updatedAt: doc.data().updatedAt?.toDate()
+      })) as Message[]
+    }, (err) => {
+      error.value = err.message
+      console.error('Error in messages realtime listener:', err)
+    })
+
+    // Store unsubscribe function
+    unsubscribeMessages.value = unsubscribe
+
+    return unsubscribe
+  }
+
+  /**
+   * Setup reactive messages listener that updates when relationships change
+   */
+  const setupReactiveMessagesListener = () => {
+    if (!authStore.user?.uid || authStore.userData?.role !== 'patient') return
+
+    // Only setup listener if we don't already have one
+    if (unsubscribeMessages.value) {
+      return // Listener already exists
+    }
+
+    // Watch for changes in relationships and update the messages listener
+    // This is a computed-like reactive effect that will re-run when myProfessionals changes
+    const updateListener = () => {
+      const connectedProfIds = getConnectedProfessionalIds()
+      if (connectedProfIds.length > 0) {
+        // Only set up listener if we have connected professionals and no listener exists
+        if (!unsubscribeMessages.value) {
+          loadMessagesRealtime()
+        }
+      }
+    }
+
+    // Initial setup
+    updateListener()
+
+    // Return a function to manually trigger updates (can be called when relationships change)
+    return updateListener
+  }
+
+  /**
    * Initialize store for current user
    */
   const initializeForCurrentUser = async () => {
     if (!authStore.user?.uid) return
 
+    // First load existing messages
     await loadMessages()
+
+    // For professionals, setup real-time listener immediately
+    // For patients, the reactive watcher will handle it when relationships are loaded
+    if (authStore.userData?.role === 'professional') {
+      const unsubscribe = loadMessagesRealtime()
+      if (unsubscribe) {
+        // Store unsubscribe function for cleanup if needed
+        // For now, we'll let the component handle cleanup
+      }
+    }
+  }
+
+  /**
+   * Initialize reactive messages listener for patients (called when relationships are loaded)
+   */
+  const initializeReactiveMessagesForPatient = () => {
+    if (!authStore.user?.uid || authStore.userData?.role !== 'patient') return
+
+    // Setup reactive listener that will update when relationships change
+    setupReactiveMessagesListener()
+  }
+
+  /**
+   * Cleanup real-time listeners
+   */
+  const cleanupListeners = () => {
+    if (unsubscribeMessages.value) {
+      unsubscribeMessages.value()
+      unsubscribeMessages.value = null
+    }
   }
 
   /**
    * Clear all data
    */
   const clearData = () => {
+    cleanupListeners()
     messages.value = []
     error.value = null
   }
@@ -286,6 +409,8 @@ export const useMessagesStore = defineStore('messages', () => {
     markAsRead,
     markAllAsRead,
     initializeForCurrentUser,
+    initializeReactiveMessagesForPatient,
+    cleanupListeners,
     clearData
   }
 })

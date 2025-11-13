@@ -1,4 +1,4 @@
-import { defineComponent, ref, computed, watch } from 'vue'
+import { defineComponent, ref, computed, watch, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRelationshipsStore } from '@/stores/relationships'
 import { usePatientDataStore } from '@/stores/patientData'
@@ -9,7 +9,7 @@ import ConnectionManager from '@/components/ConnectionManager'
 import {
   Users, Calendar, BookOpen, MessageCircle, Bell, Heart, Clock, AlertTriangle,
   CheckCircle2, Pill, ArrowLeft, Home, Activity, TrendingUp, Shield, Phone,
-  Plus, ChevronRight, Star, Target, LogOut, X
+  Plus, ChevronRight, Star, Target, LogOut, X, FileText
 } from 'lucide-vue-next'
 
 type TabId = 'home' | 'agenda' | 'monitoring' | 'support' | 'connections'
@@ -181,6 +181,7 @@ export default defineComponent({
 
     const showAddTaskModal = ref(false)
     const showSupportModal = ref(false)
+    const showPatientStatsModal = ref(false)
     const selectedSupport = ref<'palliative' | 'emotional' | 'pain' | null>(null)
     const newTask = ref({
       time: '09:00',
@@ -199,10 +200,10 @@ export default defineComponent({
       myPatients.value.find(p => p.userId === selectedPatientId.value) || myPatients.value[0]
     )
 
-    // Load patient data when patients change
+    // Load patient data when patients change with initial load + real-time listeners
     watch(myPatients, async (newPatients) => {
       if (newPatients.length > 0) {
-        // Load data for all patients in parallel and cache results
+        // First load existing historical data for all patients
         const results = await Promise.allSettled(
           newPatients.map(async (patient) => {
             const result = await patientDataStore.loadPatientData(patient.userId)
@@ -226,8 +227,55 @@ export default defineComponent({
             console.error(`Error loading data for patient ${newPatients[index].userId}:`, result.reason)
           }
         })
+
+        // Then setup real-time listeners for continuous updates
+        newPatients.forEach(patient => {
+          patientDataStore.loadDailyEntriesRealtime(patient.userId, (entries) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                dailyEntries: [...entries],
+                stats: { ...patientDataStore.patientStats }
+              }
+            }
+          })
+          patientDataStore.loadMedicationsRealtime(patient.userId, (medications) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                medications: [...medications]
+              }
+            }
+          })
+          patientDataStore.loadAppointmentsRealtime(patient.userId, (appointments) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                appointments: [...appointments]
+              }
+            }
+          })
+          patientDataStore.loadAlertsRealtime(patient.userId, (alerts) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                alerts: [...alerts]
+              }
+            }
+          })
+        })
       }
     }, { immediate: true })
+
+
+    // Cleanup listeners when component unmounts
+    onUnmounted(() => {
+      patientDataStore.cleanupListeners()
+    })
 
     const selectedPatientData = computed(() => {
       if (!selectedPatient.value) return null
@@ -528,7 +576,8 @@ export default defineComponent({
                      )}
 
                      {/* Patient status summary */}
-                     <div class="flex items-center gap-4 p-3 rounded-2xl border border-outline/40 bg-surface">
+                     <div class="flex items-center gap-4 p-3 rounded-2xl border border-outline/40 bg-surface cursor-pointer transition-all duration-200 active:scale-[0.98]"
+                          onClick={() => showPatientStatsModal.value = true}>
                        <div class="w-10 h-10 rounded-xl grid place-items-center"
                             style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-600)));">
                          <Activity class="h-5 w-5 text-onPrimary" />
@@ -540,9 +589,12 @@ export default defineComponent({
                            Ánimo: {selectedPatientData.value?.averageMood ? selectedPatientData.value.averageMood.toFixed(1) : '--'}/10
                          </p>
                        </div>
-                       <Badge class="bg-brand-50 text-brand-700 border-brand-400/40">
-                         {selectedPatientData.value?.streakDays || 0} días racha
-                       </Badge>
+                       <div class="flex items-center gap-2">
+                         <Badge class="bg-brand-50 text-brand-700 border-brand-400/40">
+                           {selectedPatientData.value?.streakDays || 0} días racha
+                         </Badge>
+                         <ChevronRight class="h-4 w-4 text-onSurface/40" />
+                       </div>
                      </div>
                    </>
                  ) : (
@@ -1125,6 +1177,300 @@ export default defineComponent({
                 >
                   Añadir Tarea
                 </AppButton>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Patient Statistics Modal */}
+        {showPatientStatsModal.value && selectedPatient.value && (
+          <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div class="mx-4 w-full max-w-4xl max-h-[90vh] rounded-3xl bg-surface p-6 shadow-2xl overflow-y-auto">
+              <div class="mb-6 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                  <div
+                    class="w-12 h-12 rounded-2xl grid place-items-center shadow-lg text-white"
+                    style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-600)));"                  >
+                    <span class="font-bold text-lg">{selectedPatient.value.userName?.charAt(0).toUpperCase() || '?'}</span>
+                  </div>
+                  <div>
+                    <h3 class="text-xl font-semibold text-onSurface">Estadísticas de {selectedPatient.value.userName || 'Paciente'}</h3>
+                    <p class="text-sm text-onSurface/70">Historial clínico • ID: {selectedPatient.value.userId.slice(-4)}</p>
+                  </div>
+                </div>
+                <AppButton
+                  class="rounded-full w-8 h-8 bg-surfaceVariant hover:bg-surfaceVariant/80"
+                  onClick={() => showPatientStatsModal.value = false}
+                >
+                  <span class="text-lg font-bold text-onSurface">×</span>
+                </AppButton>
+              </div>
+
+              <div class="space-y-6">
+                {/* Patient Stats */}
+                <Card class="rounded-2xl border border-outline/40 bg-surface">
+                  <CardHeader class="pb-4">
+                    <CardTitle class="text-lg flex items-center gap-2">
+                      <Activity class="h-5 w-5 text-brand-600" />
+                      <span>Métricas de Salud</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent class="space-y-4">
+                    {selectedPatientData.value ? (
+                      <div class="grid grid-cols-2 gap-4">
+                        <div class="p-4 rounded-2xl border border-outline/40 bg-surface">
+                          <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-onSurface/80">Dolor Promedio</span>
+                            <Heart class="h-4 w-4 text-[rgb(var(--color-error))]" />
+                          </div>
+                          <p class="text-2xl font-bold text-onSurface">
+                            {selectedPatientData.value.averagePain.toFixed(1)}/10
+                          </p>
+                          <p class="text-xs text-onSurface/60">Últimos registros</p>
+                        </div>
+
+                        <div class="p-4 rounded-2xl border border-outline/40 bg-surface">
+                          <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-onSurface/80">Ánimo General</span>
+                            <TrendingUp class="h-4 w-4 text-brand-600" />
+                          </div>
+                          <p class="text-2xl font-bold text-onSurface">
+                            {selectedPatientData.value.averageMood.toFixed(1)}/10
+                          </p>
+                          <p class="text-xs text-onSurface/60">Últimos registros</p>
+                        </div>
+
+                        <div class="p-4 rounded-2xl border border-outline/40 bg-surface">
+                          <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-onSurface/80">Total Registros</span>
+                            <Activity class="h-4 w-4 text-brand-600" />
+                          </div>
+                          <p class="text-2xl font-bold text-onSurface">{selectedPatientData.value.totalEntries}</p>
+                          <p class="text-xs text-onSurface/60">Registros realizados</p>
+                        </div>
+
+                        <div class="p-4 rounded-2xl border border-outline/40 bg-surface">
+                          <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-onSurface/80">Racha Actual</span>
+                            <CheckCircle2 class="h-4 w-4 text-[rgb(var(--color-success))]" />
+                          </div>
+                          <p class="text-2xl font-bold text-onSurface">{selectedPatientData.value.streakDays}</p>
+                          <p class="text-xs text-onSurface/60">Días consecutivos</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div class="text-center py-8">
+                        <Activity class="h-12 w-12 text-onSurface/40 mx-auto mb-3" />
+                        <p class="text-onSurface/70">No hay estadísticas disponibles</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Daily Entries History */}
+                <Card class="rounded-2xl border border-outline/40 bg-surface">
+                  <CardHeader class="pb-4">
+                    <CardTitle class="text-lg flex items-center gap-2">
+                      <FileText class="h-5 w-5 text-brand-600" />
+                      <span>Historial de Registros Diarios</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent class="space-y-4">
+                    {patientDataCache.value[selectedPatient.value.userId]?.dailyEntries && patientDataCache.value[selectedPatient.value.userId].dailyEntries.length > 0 ? (
+                      patientDataCache.value[selectedPatient.value.userId].dailyEntries
+                        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .slice(0, 10) // Show last 10 entries
+                        .map((entry: any) => {
+                          const entryDate = new Date(entry.date)
+                          const isToday = entry.date === new Date().toISOString().split('T')[0]
+
+                          return (
+                            <div key={entry.id} class="p-4 rounded-2xl border border-outline/40 bg-surface">
+                              <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                  <Calendar class="h-4 w-4 text-brand-600" />
+                                  <span class="font-medium text-onSurface">
+                                    {isToday ? 'Hoy' : entryDate.toLocaleDateString('es-ES', {
+                                      weekday: 'long',
+                                      day: 'numeric',
+                                      month: 'long'
+                                    })}
+                                  </span>
+                                </div>
+                                <Badge class="bg-brand-50 text-brand-700 border-brand-400/40">
+                                  {entryDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                                </Badge>
+                              </div>
+
+                              <div class="grid grid-cols-3 gap-3 mb-3">
+                                <div class="text-center">
+                                  <div class="w-8 h-8 mx-auto mb-1 rounded-lg grid place-items-center shadow-sm text-onPrimary"
+                                    style="background-image: linear-gradient(135deg, rgb(var(--brand-400)), rgb(var(--brand-500)));">
+                                    <span class="font-bold text-sm">{entry.mood}</span>
+                                  </div>
+                                  <p class="text-xs text-onSurface/70">Ánimo</p>
+                                </div>
+                                <div class="text-center">
+                                  <div class="w-8 h-8 mx-auto mb-1 rounded-lg grid place-items-center shadow-sm text-white"
+                                    style="background: rgb(var(--color-error));">
+                                    <span class="font-bold text-sm">{entry.pain}</span>
+                                  </div>
+                                  <p class="text-xs text-onSurface/70">Dolor</p>
+                                </div>
+                                <div class="text-center">
+                                  <div class="w-8 h-8 mx-auto mb-1 rounded-lg grid place-items-center shadow-sm text-onPrimary"
+                                    style="background: rgb(var(--color-success));">
+                                    <span class="font-bold text-sm">{entry.energy}</span>
+                                  </div>
+                                  <p class="text-xs text-onSurface/70">Energía</p>
+                                </div>
+                              </div>
+
+                              {entry.notes && (
+                                <div class="mt-3 p-3 rounded-xl bg-surfaceVariant border border-outline/20">
+                                  <p class="text-sm text-onSurface/80 italic">"{entry.notes}"</p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })
+                    ) : (
+                      <div class="text-center py-8">
+                        <FileText class="h-12 w-12 text-onSurface/40 mx-auto mb-3" />
+                        <p class="text-onSurface/70">No hay registros diarios</p>
+                        <p class="text-sm text-onSurface/50">El paciente aún no ha realizado registros</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Upcoming Appointments */}
+                <Card class="rounded-2xl border border-outline/40 bg-surface">
+                  <CardHeader class="pb-4">
+                    <CardTitle class="text-lg flex items-center gap-2">
+                      <Calendar class="h-5 w-5 text-brand-600" />
+                      <span>Próximas Citas</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent class="space-y-3">
+                    {patientDataCache.value[selectedPatient.value.userId]?.appointments &&
+                     patientDataCache.value[selectedPatient.value.userId].appointments.filter((appt: any) =>
+                       appt.status === 'scheduled' && new Date(appt.date?.toDate?.() || appt.date) > new Date()
+                     ).length > 0 ? (
+                      patientDataCache.value[selectedPatient.value.userId].appointments
+                        .filter((appt: any) => appt.status === 'scheduled' && new Date(appt.date?.toDate?.() || appt.date) > new Date())
+                        .sort((a: any, b: any) => new Date(a.date?.toDate?.() || a.date).getTime() - new Date(b.date?.toDate?.() || b.date).getTime())
+                        .slice(0, 3)
+                        .map((appointment: any) => {
+                          const apptDate = appointment.date?.toDate?.() || new Date(appointment.date)
+                          const isToday = apptDate.toDateString() === new Date().toDateString()
+                          const isTomorrow = apptDate.toDateString() === new Date(Date.now() + 86400000).toDateString()
+
+                          let dateLabel = apptDate.toLocaleDateString('es-ES', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                          })
+
+                          if (isToday) dateLabel = 'Hoy'
+                          else if (isTomorrow) dateLabel = 'Mañana'
+
+                          const isConsultation = appointment.type === 'consultation'
+                          const isEmergency = appointment.type === 'emergency'
+
+                          return (
+                            <div class={[
+                              'flex items-center gap-4 p-3 rounded-xl border',
+                              isEmergency ? 'border-[rgb(var(--color-error))/0.35] bg-[rgb(var(--color-error))/0.05]' :
+                              isConsultation ? 'border-[rgb(var(--color-success))/0.35] bg-[rgb(var(--color-success))/0.05]' :
+                              'border-brand-400/40 bg-brand-50'
+                            ].join(' ')}>
+                              <div class={[
+                                'w-10 h-10 rounded-xl grid place-items-center',
+                                isEmergency ? 'bg-[rgb(var(--color-error))]' :
+                                isConsultation ? 'bg-[rgb(var(--color-success))]' :
+                                ''
+                              ]}
+                              style={!isEmergency && !isConsultation ? "background-image: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-600)));" : undefined}
+                              >
+                                {appointment.type === 'consultation' ? <Users class="h-5 w-5 text-white" /> :
+                                 appointment.type === 'followup' ? <Heart class="h-5 w-5 text-onPrimary" /> :
+                                 appointment.type === 'emergency' ? <AlertTriangle class="h-5 w-5 text-white" /> :
+                                 <Clock class="h-5 w-5 text-onPrimary" />}
+                              </div>
+                              <div class="flex-1">
+                                <p class="font-medium text-onSurface">{appointment.title || 'Cita médica'}</p>
+                                <p class="text-sm text-onSurface/70">{appointment.description || 'Consulta programada'}</p>
+                                <p class="text-xs text-brand-600 font-medium mt-1">
+                                  {dateLabel} • {appointment.time || apptDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        })
+                    ) : (
+                      <div class="text-center py-8">
+                        <Calendar class="h-12 w-12 text-onSurface/40 mx-auto mb-4" />
+                        <p class="text-onSurface/60">No hay citas programadas</p>
+                        <p class="text-sm text-onSurface/40 mt-2">Las citas aparecerán aquí cuando se programen</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Medications */}
+                <Card class="rounded-2xl border border-outline/40 bg-surface">
+                  <CardHeader class="pb-4">
+                    <CardTitle class="text-lg flex items-center gap-2">
+                      <Pill class="h-5 w-5 text-brand-600" />
+                      <span>Medicación Actual</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent class="space-y-3">
+                    {selectedPatientMedications.value.length > 0 ? (
+                      selectedPatientMedications.value.slice(0, 5).map((medication: any) => {
+                        const isActive = medication.active
+                        const isCompleted = medication.lastTaken && new Date(medication.lastTaken.toDate()).toDateString() === new Date().toDateString()
+
+                        return (
+                          <div class={[
+                            'flex items-center justify-between p-3 rounded-xl border bg-white/50',
+                            isActive ? 'border-[rgb(var(--color-success))/0.35]' : 'border-outline/40'
+                          ].join(' ')}>
+                            <div class="flex items-center gap-3">
+                              {isCompleted ? (
+                                <CheckCircle2 class="h-5 w-5 text-[rgb(var(--color-success))]" />
+                              ) : (
+                                <Clock class="h-5 w-5 text-onSurface/60" />
+                              )}
+                              <div>
+                                <p class="font-medium text-onSurface">{medication.name || 'Medicamento'}</p>
+                                <p class="text-sm text-onSurface/70">
+                                  {medication.dosage || 'Dosis no especificada'} - {medication.frequency || 'Frecuencia no especificada'}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge class={
+                              isCompleted
+                                ? 'bg-[rgb(var(--color-success))] text-white border-[rgb(var(--color-success))]'
+                                : isActive
+                                  ? 'bg-brand-50 text-brand-700 border-brand-400/40'
+                                  : 'bg-surfaceVariant text-onSurface border-outline/40'
+                            }>
+                              {isCompleted ? 'Tomada' : isActive ? 'Activa' : 'Inactiva'}
+                            </Badge>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <div class="text-center py-8">
+                        <Pill class="h-12 w-12 text-onSurface/40 mx-auto mb-4" />
+                        <p class="text-onSurface/60">No hay medicación registrada</p>
+                        <p class="text-sm text-onSurface/40 mt-2">La medicación aparecerá aquí cuando sea prescrita</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </div>
           </div>

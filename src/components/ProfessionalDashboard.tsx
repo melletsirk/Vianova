@@ -1,4 +1,4 @@
-import { defineComponent, ref, computed, watch } from 'vue'
+import { defineComponent, ref, computed, watch, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRelationshipsStore } from '@/stores/relationships'
 import { usePatientDataStore } from '@/stores/patientData'
@@ -155,12 +155,12 @@ export default defineComponent({
       return { patient, data: cachedData }
     })
 
-    // Load patient data when patients change
+    // Load patient data when patients change with initial load + real-time listeners
     watch(myPatients, async (newPatients) => {
       if (newPatients.length > 0) {
         isLoadingPatients.value = true
 
-        // Load data for all patients in parallel with controlled concurrency
+        // First load existing historical data for all patients in parallel with controlled concurrency
         const BATCH_SIZE = 3 // Load 3 patients at a time to avoid overwhelming Firebase
         for (let i = 0; i < newPatients.length; i += BATCH_SIZE) {
           const batch = newPatients.slice(i, i + BATCH_SIZE)
@@ -200,9 +200,55 @@ export default defineComponent({
           }
         }
 
+        // Then setup real-time listeners for continuous updates
+        newPatients.forEach(patient => {
+          patientDataStore.loadDailyEntriesRealtime(patient.userId, (entries) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                dailyEntries: [...entries],
+                stats: { ...patientDataStore.patientStats }
+              }
+            }
+          })
+          patientDataStore.loadMedicationsRealtime(patient.userId, (medications) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                medications: [...medications]
+              }
+            }
+          })
+          patientDataStore.loadAppointmentsRealtime(patient.userId, (appointments) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                appointments: [...appointments]
+              }
+            }
+          })
+          patientDataStore.loadAlertsRealtime(patient.userId, (alerts) => {
+            if (patientDataCache.value[patient.userId]) {
+              // Replace entire cache entry to trigger reactivity
+              patientDataCache.value[patient.userId] = {
+                ...patientDataCache.value[patient.userId],
+                alerts: [...alerts]
+              }
+            }
+          })
+        })
+
         isLoadingPatients.value = false
       }
     }, { immediate: true })
+
+    // Cleanup listeners when component unmounts
+    onUnmounted(() => {
+      patientDataStore.cleanupListeners()
+    })
 
     const patientStats = computed(() => {
       const patients = myPatients.value

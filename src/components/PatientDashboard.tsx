@@ -1,7 +1,8 @@
-import { defineComponent, ref, computed, onMounted } from 'vue'
+import { defineComponent, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { usePatientDataStore } from '@/stores/patientData'
 import { useMessagesStore } from '@/stores/messages'
+import { useRelationshipsStore } from '@/stores/relationships'
 import AppButton from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import ConnectionManager from '@/components/ConnectionManager'
@@ -141,6 +142,7 @@ export default defineComponent({
     const authStore = useAuthStore()
     const patientDataStore = usePatientDataStore()
     const messagesStore = useMessagesStore()
+    const relationshipsStore = useRelationshipsStore()
 
     // estado
     const moodLevel = ref<number>(6)
@@ -160,6 +162,18 @@ export default defineComponent({
         await patientDataStore.loadPatientData(authStore.user.uid)
         await messagesStore.initializeForCurrentUser()
       }
+    })
+
+    // Watch for relationships changes and setup reactive messages listener
+    watch(() => relationshipsStore.myProfessionals, (newProfessionals) => {
+      if (newProfessionals && newProfessionals.length > 0 && authStore.userData?.role === 'patient') {
+        messagesStore.initializeReactiveMessagesForPatient()
+      }
+    }, { immediate: true })
+
+    // Cleanup listeners on unmount
+    onUnmounted(() => {
+      messagesStore.cleanupListeners()
     })
 
     const openWellnessActivity = (activityId: string) => {
