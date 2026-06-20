@@ -17,7 +17,6 @@ Vianova nace para resolver un problema concreto: la coordinación de cuidados pa
 - **Control de acceso basado en roles (RBAC)** para 4 tipos de usuario — paciente, cuidador, profesional de salud y superadministrador — cada uno con vistas, permisos y alcance de datos independientes.
 - **Sincronización en tiempo real** vía Firebase Firestore: los dashboards se actualizan en vivo entre usuarios, sin necesidad de polling.
 - **Panel de superadministrador** para gestión de usuarios y datos a nivel de toda la plataforma.
-- [COMPLETAR: función de audio — ¿notas de voz para cuidadores? ¿accesibilidad? describe en 1 línea qué hace `audio/` y `upload-audio.js`]
 
 ## 🛠️ Stack tecnológico
 
@@ -40,9 +39,6 @@ npm run dev
 Configuración de variables de entorno y credenciales de Firebase: ver [`FIREBASE_SETUP.md`](./FIREBASE_SETUP.md).
 Configuración de despliegue automático: ver [`DEPLOYMENT_README.md`](./DEPLOYMENT_README.md).
 
-## 👥 Autoría
-
-Desarrollado por [Melissa Chambi Flores](https://github.com/melletsirk)[COMPLETAR: si hubo colaboradores en el código, créditalos aquí — ej. "junto a [nombre], encargado de X"].
 
 # Vue 3 + TypeScript + Vite
 
